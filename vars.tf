@@ -3,3 +3,4 @@ variable "subnets" {}
 variable "env" {}
 variable "vpc_id" {}
 variable "az"{}
+variable "name" {}
