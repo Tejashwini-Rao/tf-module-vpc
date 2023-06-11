@@ -20,20 +20,56 @@ module "subnet" {
 
 }
 
+module "routes" {
+  for_each                  = var.subnets
+  source                    = "./routes"
+  vpc_id                    = aws_vpc.main.id
+  name                      = each.value["name"]
+  subnet_ids                = module.subnets
+  gateway_id                = aws_internet_gateway.igw.id
+  nat_gateway_id            = aws_nat_gateway.ngw.id
+  ngw                       = try(each.value["ngw"], false)
+  igw                       = try(each.value["igw"], false)
+  default_vpc_cidr          = var.default_vpc_cidr
+  vpc_peering_connection_id = aws_vpc_peering_connection.peering-to-default-vpc.id
+}
+
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "$(var.env)-igw"
+    Name = "${var.env}-igw"
   }
 }
 
-resource "aws_route_table" "route" {
-  for_each = var.subnets
-  vpc_id = aws_vpc.main.id
+resource "aws_eip" "ngw" {
+  vpc = true
+}
 
+resource "aws_nat_gateway" "ngw" {
+  allocation_id = aws_eip.ngw.id
+  subnet_id     = module.subnets["public"].subnets[0].id
 
   tags = {
-    Name ="${each.value["name"]}-rt"
+    Name = "gw NAT"
   }
+}
+
+resource "aws_vpc_peering_connection" "peering-to-default-vpc" {
+  peer_vpc_id = aws_vpc.main.id
+  vpc_id      = var.default_vpc_id
+  auto_accept = true
+}
+
+resource "aws_route" "peering-route-on-default-route-table" {
+  route_table_id            = var.default_route_table_id
+  destination_cidr_block    = var.cidr_block
+  vpc_peering_connection_id = aws_vpc_peering_connection.peering-to-default-vpc.id
+}
+
+## Route53 add
+resource "aws_route53_zone_association" "zone" {
+  zone_id = data.aws_route53_zone.private.zone_id
+  vpc_id  = aws_vpc.main.id
+
 }
